@@ -2034,6 +2034,7 @@ test('Skip commention on issues/PR if "successComment" is "false"', async (t) =>
   const env = { GITHUB_TOKEN: "github_token" };
   const failTitle = "The automated release is failing 🚨";
   const pluginConfig = { failTitle, successComment: false };
+  const prs = [{ number: 1, pull_request: {}, state: "closed" }];
   const options = {
     repositoryUrl: `https://github.com/${owner}/${repo}.git`,
   };
@@ -2054,6 +2055,23 @@ test('Skip commention on issues/PR if "successComment" is "false"', async (t) =>
     .getOnce(`https://api.github.local/repos/${owner}/${repo}`, {
       full_name: `${owner}/${repo}`,
     })
+    .getOnce(
+      `https://api.github.local/search/issues?q=${encodeURIComponent(
+        `repo:${owner}/${repo}`,
+      )}+${encodeURIComponent("type:pr")}+${encodeURIComponent(
+        "is:merged",
+      )}+${commits.map((commit) => commit.hash).join("+")}`,
+      { items: prs },
+    )
+    .getOnce(
+      `https://api.github.local/repos/${owner}/${repo}/pulls/1/commits`,
+      [{ sha: commits[0].hash }],
+    )
+    .postOnce(
+      `https://api.github.local/repos/${owner}/${repo}/issues/1/labels`,
+      {},
+      { body: ["released"] },
+    )
     .getOnce(
       `https://api.github.local/search/issues?q=${encodeURIComponent(
         "in:title",
@@ -2084,6 +2102,9 @@ test('Skip commention on issues/PR if "successComment" is "false"', async (t) =>
 
   t.true(
     t.context.log.calledWith("Skip commenting on issues and pull requests."),
+  );
+  t.true(
+    t.context.log.calledWith("Added labels %O to issue #%d", ["released"], 1),
   );
   t.true(fetch.done());
 });
