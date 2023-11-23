@@ -1061,6 +1061,7 @@ test.serial('Skip commention on issues/PR if "successComment" is "false"', async
   const env = {GITHUB_TOKEN: 'github_token'};
   const failTitle = 'The automated release is failing 🚨';
   const pluginConfig = {failTitle, successComment: false};
+  const prs = [{number: 1, pull_request: {}, state: 'closed'}];
   const options = {repositoryUrl: `https://github.com/${owner}/${repo}.git`};
   const commits = [{hash: '123', message: 'Commit 1 message\n\n Fix #1', tree: {long: 'aaa'}}];
   const nextRelease = {version: '1.0.0'};
@@ -1068,6 +1069,16 @@ test.serial('Skip commention on issues/PR if "successComment" is "false"', async
   const github = authenticate(env)
     .get(`/repos/${owner}/${repo}`)
     .reply(200, {full_name: `${owner}/${repo}`})
+    .get(
+      `/search/issues?q=${escape(`repo:${owner}/${repo}`)}+${escape('type:pr')}+${escape('is:merged')}+${commits
+        .map((commit) => commit.hash)
+        .join('+')}`
+    )
+    .reply(200, {items: prs})
+    .get(`/repos/${owner}/${repo}/pulls/1/commits`)
+    .reply(200, [{sha: commits[0].hash}])
+    .post(`/repos/${owner}/${repo}/issues/1/labels`, '["released"]')
+    .reply(200, {body: ['released']})
     .get(
       `/search/issues?q=${escape('in:title')}+${escape(`repo:${owner}/${repo}`)}+${escape('type:issue')}+${escape(
         'state:open'
@@ -1086,6 +1097,7 @@ test.serial('Skip commention on issues/PR if "successComment" is "false"', async
   });
 
   t.true(t.context.log.calledWith('Skip commenting on issues and pull requests.'));
+  t.true(t.context.log.calledWith('Added labels %O to issue #%d', ['released'], 1));
   t.true(github.isDone());
 });
 
